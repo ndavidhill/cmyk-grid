@@ -22,26 +22,26 @@
 // ─── Configuration ─────────────────────────────────────────────────────────
 
 var CONFIG = {
-  // Page setup (A4 landscape for wide grids)
-  pageWidth:  297,   // mm
-  pageHeight: 210,   // mm
-  margin:      15,   // mm
+  // Page setup — A2 landscape
+  pageWidth:  594,   // mm
+  pageHeight: 420,   // mm
+  margin:      20,   // mm
 
   // Swatch grid
   swatchCols:   5,
-  swatchSize:  28,   // mm — swatch square
-  swatchGap:    4,   // mm
-  labelHeight: 14,   // mm — below each swatch
-  groupGap:    18,   // mm — between colour groups
+  swatchSize:  48,   // mm — swatch square
+  swatchGap:    6,   // mm
+  labelHeight: 18,   // mm — below each swatch
+  groupGap:    22,   // mm — between colour groups
 
   // Source swatch (large reference, left of each group)
-  sourceSwatchSize: 22, // mm
+  sourceSwatchSize: 40, // mm
 
   // Typography
   fontFamily: "Courier New",
-  fontSizeLabel:  6,   // pt — swatch CMYK label
-  fontSizeHeader: 9,   // pt — group header
-  fontSizeMeta:   7,   // pt — page footer
+  fontSizeLabel:  9,    // pt — swatch CMYK label
+  fontSizeHeader: 14,   // pt — group header
+  fontSizeMeta:   9,    // pt — page footer
 
   // FOGRA39 profile name as InDesign sees it
   // Change this if your system uses a different profile name:
@@ -55,6 +55,41 @@ var CONFIG = {
     "Coated FOGRA39",
   ],
 };
+
+// ─── ES3 Polyfills (ExtendScript / InDesign has no trim, toISOString, etc.) ─
+
+if (!String.prototype.trim) {
+  String.prototype.trim = function () {
+    return this.replace(/^\s+|\s+$/g, "");
+  };
+}
+
+if (!Array.prototype.indexOf) {
+  Array.prototype.indexOf = function (val) {
+    for (var i = 0; i < this.length; i++) {
+      if (this[i] === val) return i;
+    }
+    return -1;
+  };
+}
+
+// Simple date string: "08 May 2026"
+function simpleDateString() {
+  var months = ["January","February","March","April","May","June",
+                "July","August","September","October","November","December"];
+  var d = new Date();
+  return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
+}
+
+// Simple ISO date: "2026-05-08"
+function isoDateString() {
+  var d = new Date();
+  var mm = d.getMonth() + 1;
+  var dd = d.getDate();
+  return d.getFullYear() + "-" +
+    (mm < 10 ? "0" + mm : mm) + "-" +
+    (dd < 10 ? "0" + dd : dd);
+}
 
 // ─── Unit helpers (all internal work in mm → pts) ──────────────────────────
 
@@ -121,14 +156,14 @@ function groupRows(rows) {
 // Add or retrieve a CMYK swatch from the document swatches
 function getOrCreateSwatch(doc, c, m, y, k) {
   var name = "C=" + c + " M=" + m + " Y=" + y + " K=" + k;
-  // Check if it already exists
-  try {
-    return doc.colors.itemByName(name);
-  } catch (e) {}
 
+  // itemByName returns a speculative object rather than throwing —
+  // must check .isValid before using it
   var existing = doc.colors;
   for (var i = 0; i < existing.length; i++) {
-    if (existing[i].name === name) return existing[i];
+    try {
+      if (existing[i].isValid && existing[i].name === name) return existing[i];
+    } catch (e) {}
   }
 
   var swatch = doc.colors.add();
@@ -137,6 +172,19 @@ function getOrCreateSwatch(doc, c, m, y, k) {
   swatch.colorValue = [c, m, y, k];
   swatch.name       = name;
   return swatch;
+}
+
+// Safely get a named swatch/colour, returns null if not found
+function getSwatch(doc, name) {
+  try {
+    var s = doc.swatches.itemByName(name);
+    if (s && s.isValid) return s;
+  } catch (e) {}
+  try {
+    var c = doc.colors.itemByName(name);
+    if (c && c.isValid) return c;
+  } catch (e) {}
+  return null;
 }
 
 // Luminance check — return true if text should be black
@@ -153,15 +201,35 @@ function useDarkText(c, m, y, k) {
 
 function createDocument() {
   var doc = app.documents.add();
-  doc.documentPreferences.pageWidth  = mm(CONFIG.pageWidth);
-  doc.documentPreferences.pageHeight = mm(CONFIG.pageHeight);
+
+  // Set units to millimetres FIRST — InDesign interprets pageWidth/Height
+  // in the document's current ruler units. Without this, passing mm-converted
+  // point values can exceed internal range limits on large formats like A2.
+  var savedHUnits = doc.viewPreferences.horizontalMeasurementUnits;
+  var savedVUnits = doc.viewPreferences.verticalMeasurementUnits;
+  doc.viewPreferences.horizontalMeasurementUnits = MeasurementUnits.MILLIMETERS;
+  doc.viewPreferences.verticalMeasurementUnits   = MeasurementUnits.MILLIMETERS;
+
+  // Now set page size directly in mm (no conversion needed)
+  doc.documentPreferences.pageWidth   = CONFIG.pageWidth;
+  doc.documentPreferences.pageHeight  = CONFIG.pageHeight;
   doc.documentPreferences.facingPages = false;
+
+  // Margins — still in mm while units are mm
+  var mp = doc.pages[0].marginPreferences;
+  mp.top    = CONFIG.margin;
+  mp.bottom = CONFIG.margin;
+  mp.left   = CONFIG.margin;
+  mp.right  = CONFIG.margin;
+
+  // Restore units to points so all mm() geometry calls work correctly
+  doc.viewPreferences.horizontalMeasurementUnits = MeasurementUnits.POINTS;
+  doc.viewPreferences.verticalMeasurementUnits   = MeasurementUnits.POINTS;
 
   // Set document colour profile to FOGRA39
   var profileSet = false;
   var profileName = CONFIG.fogra39ProfileName;
 
-  // Try primary name, then fallbacks
   var profilesToTry = [profileName].concat(CONFIG.fogra39Fallbacks);
   for (var pi = 0; pi < profilesToTry.length; pi++) {
     try {
@@ -182,13 +250,6 @@ function createDocument() {
     );
   }
 
-  // Margins
-  var mp = doc.pages[0].marginPreferences;
-  mp.top    = mm(CONFIG.margin);
-  mp.bottom = mm(CONFIG.margin);
-  mp.left   = mm(CONFIG.margin);
-  mp.right  = mm(CONFIG.margin);
-
   return { doc: doc, profileName: profileName, profileSet: profileSet };
 }
 
@@ -197,42 +258,56 @@ function createDocument() {
 function drawRect(page, x, y, w, h, fillColour, strokeColour, strokeWeight) {
   var rect = page.rectangles.add();
   rect.geometricBounds = [mm(y), mm(x), mm(y + h), mm(x + w)];
-  if (fillColour) {
-    rect.fillColor = fillColour;
-  } else {
-    rect.fillColor = page.parent.swatches.itemByName("None");
-  }
-  if (strokeColour && strokeWeight) {
-    rect.strokeColor  = strokeColour;
-    rect.strokeWeight = strokeWeight;
-  } else {
-    rect.strokeColor = page.parent.swatches.itemByName("None");
-  }
+  var doc = page.parent;
+
+  try {
+    rect.fillColor = (fillColour && fillColour.isValid) ? fillColour : getSwatch(doc, "None");
+  } catch (e) {}
+
+  try {
+    if (strokeColour && strokeColour.isValid && strokeWeight) {
+      rect.strokeColor  = strokeColour;
+      rect.strokeWeight = strokeWeight;
+    } else {
+      rect.strokeColor = getSwatch(doc, "None");
+    }
+  } catch (e) {}
+
   return rect;
 }
 
 function drawText(page, x, y, w, h, content, fontSize, align, colourName, bold) {
   var tf = page.textFrames.add();
   tf.geometricBounds = [mm(y), mm(x), mm(y + h), mm(x + w)];
-  tf.textFramePreferences.insets = [0, 0, 0, 0];
+
+  // Zero insets — property name varies by ID version, try both
+  try { tf.textFramePreferences.insetSpacing = [0, 0, 0, 0]; } catch (e) {}
+
   tf.contents = content;
-  var para = tf.paragraphs[0];
-  para.pointSize    = fontSize;
-  para.justification = align || Justification.LEFT_ALIGN;
-  para.leading      = fontSize * 1.3;
-  if (bold) para.fontStyle = "Bold";
-  try {
-    para.appliedFont = CONFIG.fontFamily;
-  } catch (e) {}
-  // Text colour
-  var tcName = colourName || "Black";
-  try {
-    para.fillColor = page.parent.colors.itemByName(tcName);
-  } catch (e) {
+
+  // Style all paragraphs (\n in content creates multiple)
+  for (var pi = 0; pi < tf.paragraphs.length; pi++) {
+    var para = tf.paragraphs[pi];
+    try { para.pointSize = fontSize; } catch (e) {}
+    try { para.leading = fontSize * 1.35; } catch (e) {}
+    try { para.justification = align || Justification.LEFT_ALIGN; } catch (e) {}
+
+    if (bold) {
+      try { para.appliedFont = app.fonts.itemByName(CONFIG.fontFamily + "\tBold"); } catch (e) {
+        try { para.appliedFont = CONFIG.fontFamily; } catch (e2) {}
+        try { para.fontStyle = "Bold"; } catch (e3) {}
+      }
+    } else {
+      try { para.appliedFont = CONFIG.fontFamily; } catch (e) {}
+    }
+
+    var tcName = colourName || "Black";
     try {
-      para.fillColor = page.parent.swatches.itemByName(tcName);
-    } catch (e2) {}
+      var tc = getSwatch(page.parent, tcName);
+      if (tc) para.fillColor = tc;
+    } catch (e) {}
   }
+
   return tf;
 }
 
@@ -249,18 +324,18 @@ function renderGroups(doc, grouped) {
   var page = doc.pages[0];
 
   // Page title
-  var dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  var dateStr = simpleDateString();
   drawText(page,
-    margin, margin, contentW, 8,
+    margin, margin, contentW, 12,
     "CMYK COLOUR REFERENCE  —  FOGRA39 / ISO 12647-2  —  " + dateStr,
-    8, Justification.LEFT_ALIGN, null, true
+    12, Justification.LEFT_ALIGN, null, true
   );
   drawText(page,
-    margin, margin, contentW, 8,
+    margin, margin, contentW, 12,
     "For accurate print output export as PDF/X-4 with FOGRA39 output intent",
-    7, Justification.RIGHT_ALIGN
+    10, Justification.RIGHT_ALIGN
   );
-  curY = margin + 11;
+  curY = margin + 16;
 
   var swatchSize = CONFIG.swatchSize;
   var swatchGap  = CONFIG.swatchGap;
@@ -296,19 +371,19 @@ function renderGroups(doc, grouped) {
 
     // ── Group header ───────────────────────────────────────────────
     drawText(page,
-      margin, curY, contentW, 6,
+      margin, curY, contentW, 10,
       group.label.toUpperCase(),
       CONFIG.fontSizeHeader, Justification.LEFT_ALIGN, null, true
     );
     if (src) {
       drawText(page,
-        margin, curY, contentW, 6,
+        margin, curY, contentW, 10,
         "Source CMYK: C" + src.c + " M" + src.m + " Y" + src.y + " K" + src.k +
         "   HEX: " + src.hex,
         CONFIG.fontSizeLabel, Justification.RIGHT_ALIGN
       );
     }
-    curY += 7;
+    curY += 12;
 
     // ── Source reference swatch ────────────────────────────────────
     var srcX = margin;
@@ -322,7 +397,7 @@ function renderGroups(doc, grouped) {
       drawText(page,
         srcX, srcY + srcSize + 1, srcSize, labelH * 0.8,
         "SOURCE\nC" + src.c + " M" + src.m + "\nY" + src.y + " K" + src.k,
-        CONFIG.fontSizeLabel - 0.5, Justification.CENTER_ALIGN
+        CONFIG.fontSizeLabel, Justification.CENTER_ALIGN
       );
     }
 
@@ -342,15 +417,16 @@ function renderGroups(doc, grouped) {
 
       // Nearest marker — thin black border
       if (sw.isNearest) {
-        var blackColour = doc.colors.itemByName("Black");
+        var blackColour = getSwatch(doc, "Black");
+        var noneColour  = getSwatch(doc, "None");
         var borderRect = page.rectangles.add();
         borderRect.geometricBounds = [
           mm(swY - 1), mm(swX - 1),
           mm(swY + swatchSize + 1), mm(swX + swatchSize + 1)
         ];
-        borderRect.fillColor   = doc.swatches.itemByName("None");
-        borderRect.strokeColor = blackColour;
-        borderRect.strokeWeight = 1.5;
+        try { if (noneColour)  borderRect.fillColor   = noneColour;  } catch (e) {}
+        try { if (blackColour) borderRect.strokeColor = blackColour; } catch (e) {}
+        try { borderRect.strokeWeight = 1.5; } catch (e) {}
       }
 
       // CMYK label inside swatch (top-left)
@@ -359,21 +435,23 @@ function renderGroups(doc, grouped) {
       var labelText = "C" + sw.c + " M" + sw.m + "\nY" + sw.y + " K" + sw.k;
       if (sw.isNearest) labelText = "\u2605 " + labelText; // ★
 
-      var tf = page.textFrames.add();
-      tf.geometricBounds = [
+      var swTf = page.textFrames.add();
+      swTf.geometricBounds = [
         mm(swY + 1.5), mm(swX + 1.5),
         mm(swY + swatchSize - 1), mm(swX + swatchSize - 1)
       ];
-      tf.contents = labelText;
-      var para = tf.paragraphs[0];
-      para.pointSize = CONFIG.fontSizeLabel;
-      para.leading   = CONFIG.fontSizeLabel * 1.35;
-      try { para.appliedFont = CONFIG.fontFamily; } catch (e) {}
-      try {
-        para.fillColor = dark
-          ? doc.colors.itemByName("Black")
-          : doc.swatches.itemByName("Paper");
-      } catch (e) {}
+      try { swTf.textFramePreferences.insetSpacing = [0, 0, 0, 0]; } catch (e) {}
+      swTf.contents = labelText;
+      for (var lpi = 0; lpi < swTf.paragraphs.length; lpi++) {
+        var lPara = swTf.paragraphs[lpi];
+        try { lPara.pointSize = CONFIG.fontSizeLabel; } catch (e) {}
+        try { lPara.leading = CONFIG.fontSizeLabel * 1.35; } catch (e) {}
+        try { lPara.appliedFont = CONFIG.fontFamily; } catch (e) {}
+        try {
+          var lc = getSwatch(doc, dark ? "Black" : "Paper");
+          if (lc) lPara.fillColor = lc;
+        } catch (e) {}
+      }
 
       // Advance grid position
       col++;
@@ -396,7 +474,7 @@ function renderGroups(doc, grouped) {
   for (var pi = 0; pi < doc.pages.length; pi++) {
     var pg = doc.pages[pi];
     drawText(pg,
-      margin, pageH - margin - 4, contentW, 4,
+      margin, pageH - margin - 8, contentW, 8,
       "FOGRA39 / ISO 12647-2:2004  ·  Coated offset  ·  Export as PDF/X-4 with FOGRA39 output intent  ·  Page " + (pi + 1) + " of " + doc.pages.length,
       CONFIG.fontSizeMeta, Justification.CENTER_ALIGN
     );
@@ -408,7 +486,7 @@ function renderGroups(doc, grouped) {
 function exportPDF(doc, csvFile, profileName) {
   var pdfPath = csvFile.path + "/" +
     csvFile.name.replace(/\.csv$/i, "") +
-    "_FOGRA39_" + new Date().toISOString().slice(0, 10) + ".pdf";
+    "_FOGRA39_" + isoDateString() + ".pdf";
 
   var pdfPreset;
   // Try to use PDF/X-4 preset

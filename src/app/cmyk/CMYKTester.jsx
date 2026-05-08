@@ -37,19 +37,73 @@ export default function CMYKTester() {
         a { color: ${fg}; }
         a:hover { opacity: 0.25; text-decoration: none; }
         button:hover { opacity: 0.25; }
-        @media print {
-          .no-print { display: none !important; }
-          .print-area { overflow: visible !important; height: auto !important; position: static !important; width: 100% !important; }
-          body { background: white !important; overflow: auto !important; }
-        }
+
         @media (max-width: 800px) {
           body, html { overflow: auto; }
           .overlay-panel { position: relative !important; width: 100vw !important; height: auto !important; }
           .main-area { position: relative !important; width: calc(100vw - 20px) !important; height: auto !important; top: auto !important; right: auto !important; margin: 10px auto 0 !important; }
         }
+
+        @media print {
+          /* ── Force colour backgrounds to print ── */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+
+          /* ── Reset page chrome ── */
+          @page {
+            size: A3 landscape;
+            margin: 12mm;
+          }
+
+          body, html {
+            overflow: visible !important;
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          /* ── Hide the sidebar ── */
+          .no-print { display: none !important; }
+
+          /* ── Full-width print area ── */
+          .print-area {
+            position: static !important;
+            width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
+            top: auto !important;
+            right: auto !important;
+            left: auto !important;
+          }
+
+          /* ── Print header ── */
+          .print-header {
+            display: flex !important;
+            justify-content: space-between;
+            align-items: baseline;
+            border-bottom: 1px solid #000;
+            padding-bottom: 4mm;
+            margin-bottom: 6mm;
+          }
+
+          /* ── Keep each colour group together ── */
+          .colour-group {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+
+          /* ── Swatch grid cells never break mid-row ── */
+          .swatch-cell {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+        }
       `}</style>
 
-      {/* Overlay panel */}
+      {/* Overlay panel — hidden on print */}
       <div
         className="overlay-panel no-print"
         style={{
@@ -91,6 +145,24 @@ export default function CMYKTester() {
           scrollbarWidth: 'none',
         }}
       >
+        {/* Print-only header */}
+        <div className="print-header" style={{ display: 'none' }}>
+          <div style={{
+            fontFamily: 'Helvetica, Arial, sans-serif',
+            fontSize: 14, fontWeight: 'bold',
+            textTransform: 'uppercase', letterSpacing: '0.05rem',
+          }}>
+            CMYK Colour Reference — FOGRA39
+          </div>
+          <div style={{
+            fontFamily: 'Helvetica, Arial, sans-serif',
+            fontSize: 9, opacity: 0.5,
+            textTransform: 'uppercase', letterSpacing: '0.02rem',
+          }}>
+            Step ±{step}% · {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </div>
+        </div>
+
         {colours.length === 0 && (
           <div style={{
             padding: 20, fontSize: 12, opacity: 0.3,

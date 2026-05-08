@@ -6,16 +6,20 @@ export default function ColourResult({ entry, step, spread }) {
   const baseCmyk = rgbToCmyk(entry.r, entry.g, entry.b);
   const grid = buildGrid(entry, baseCmyk, step, spread);
   const nearest = grid[0];
+  const sourceHex = rgbToHex(entry.r, entry.g, entry.b);
 
   return (
-    <div style={{
-      marginBottom: 10,
-      borderRadius: 5,
-      background: 'var(--color-accent)',
-      padding: 5,
-      pageBreakInside: 'avoid',
-      breakInside: 'avoid',
-    }}>
+    <div
+      className="colour-group"
+      style={{
+        marginBottom: 10,
+        borderRadius: 5,
+        background: 'var(--color-accent)',
+        WebkitPrintColorAdjust: 'exact',
+        printColorAdjust: 'exact',
+        padding: 5,
+      }}
+    >
       {/* Header */}
       <div style={{
         display: 'flex',
@@ -27,10 +31,12 @@ export default function ColourResult({ entry, step, spread }) {
         <div style={{
           width: 28,
           height: 28,
-          borderRadius: 5,
+          borderRadius: 4,
           flexShrink: 0,
-          background: rgbToHex(entry.r, entry.g, entry.b),
-          outline: '1px solid var(--color-accent)',
+          background: sourceHex,
+          WebkitPrintColorAdjust: 'exact',
+          printColorAdjust: 'exact',
+          outline: '1px solid rgba(0,0,0,0.15)',
         }} />
         <div style={{ flex: 1 }}>
           <div style={{
@@ -53,14 +59,14 @@ export default function ColourResult({ entry, step, spread }) {
             opacity: 0.5,
             marginTop: 1,
           }}>
-            {rgbToHex(entry.r, entry.g, entry.b).toUpperCase()}
+            {sourceHex.toUpperCase()}
             {' · '}Base C{baseCmyk.c} M{baseCmyk.m} Y{baseCmyk.y} K{baseCmyk.k}
             {' · '}Nearest C{nearest.c} M{nearest.m} Y{nearest.y} K{nearest.k}
           </div>
         </div>
       </div>
 
-      {/* Grid */}
+      {/* Swatch grid */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(5, 1fr)',
