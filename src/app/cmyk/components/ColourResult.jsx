@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { rgbToCmyk, buildGrid, rgbToHex, nearestPantones, nearestPantonesForCmyk, cmykToRgb, useDarkText } from '../colourMath';
 import Swatch from './Swatch';
+import RadixPaletteStrip from './RadixPaletteStrip';
 
 function useColourData(r, g, b) {
   const [data, setData] = useState(null);
@@ -188,6 +189,29 @@ export default function ColourResult({ entry, step, spread }) {
             onClick={() => handleSwatchClick(sw, i)}
           />
         ))}
+      </div>
+
+      {/* Radix palette strip — shows for selected swatch or base colour */}
+      <div style={{
+        marginTop: 12,
+        paddingTop: 10,
+        borderTop: '1px solid var(--color-bg)',
+      }}>
+        <div style={{
+          fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 9,
+          fontWeight: 'bold', letterSpacing: '0.05rem', textTransform: 'uppercase',
+          color: 'var(--color-fg)', opacity: 0.35, marginBottom: 6,
+        }}>
+          {selectedSwatch
+            ? `UI Scale — C${selectedSwatch.c} M${selectedSwatch.m} Y${selectedSwatch.y} K${selectedSwatch.k}`
+            : 'UI Scale — Source colour'
+          }
+        </div>
+        <RadixPaletteStrip
+          r={selectedSwatch ? selectedSwatch.r : entry.r}
+          g={selectedSwatch ? selectedSwatch.g : entry.g}
+          b={selectedSwatch ? selectedSwatch.b : entry.b}
+        />
       </div>
 
       {selectedSwatch && (
