@@ -224,8 +224,11 @@ export default function Controls({
           {exportFlash ? '✓ Exported' : 'Export CSV → InDesign'}
         </Btn>
         <Btn onClick={() => downloadFigmaVariables(colours)}>
-          Export → Figma Variables
+          Export → Figma (Light + Dark)
         </Btn>
+        <div style={{ fontSize: 9, opacity: 0.4, lineHeight: 1.5, marginBottom: 4, fontFamily: 'Helvetica, Arial, sans-serif' }}>
+          Downloads 2 JSON files. In Figma: Variables panel → right-click a mode → Import mode.
+        </div>
         <Btn onClick={() => window.print()}>Print / PDF</Btn>
         <div style={{ marginTop: 10, borderTop: '1px solid var(--color-accent)', paddingTop: 8 }}>
           <div style={{ fontSize: 9, fontWeight: 'bold', letterSpacing: '0.05rem', opacity: 0.4, marginBottom: 6, fontFamily: 'Helvetica, Arial, sans-serif', textTransform: 'uppercase' }}>

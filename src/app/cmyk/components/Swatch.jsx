@@ -1,22 +1,19 @@
 'use client';
-import { rgbToHex, useDarkText } from '../colourMath';
+import { rgbToHex, useDarkText, isOutOfGamut } from '../colourMath';
 
 export default function Swatch({ sw, isNearest, isSelected, onClick }) {
   const hex  = rgbToHex(sw.r, sw.g, sw.b);
   const dark = useDarkText(sw.r, sw.g, sw.b);
   const textColor = dark ? '#000000' : '#ffffff';
 
-  // Outline logic:
-  // - Selected: solid 2px black outline (user chose this)
-  // - Nearest (unselected): same visual weight as before
-  // - Neither: no outline
+  // Gamut check — memoised implicitly since sw values are stable per render
+  const gamut = isOutOfGamut(sw.r, sw.g, sw.b);
+
   const outline = isSelected
     ? '2px solid var(--color-fg)'
-    : isNearest && !isSelected
+    : isNearest
     ? '2px solid var(--color-fg)'
     : 'none';
-
-  const outlineOffset = (isSelected || isNearest) ? 2 : 0;
 
   return (
     <div
@@ -32,7 +29,7 @@ export default function Swatch({ sw, isNearest, isSelected, onClick }) {
         flexDirection: 'column',
         gap: 2,
         outline,
-        outlineOffset,
+        outlineOffset: (isSelected || isNearest) ? 2 : 0,
         fontFamily: 'Helvetica, Arial, sans-serif',
         fontSize: 11,
         fontWeight: 'bold',
@@ -42,44 +39,47 @@ export default function Swatch({ sw, isNearest, isSelected, onClick }) {
         minHeight: 80,
         position: 'relative',
         cursor: 'pointer',
-        transition: 'outline 0.1s, opacity 0.1s',
         userSelect: 'none',
       }}
       onMouseEnter={e => { if (!isSelected) e.currentTarget.style.opacity = '0.85'; }}
       onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
     >
-      {/* Star marker — always on nearest regardless of selection */}
+      {/* Nearest / selected label */}
       {isNearest && (
         <div style={{
-          position: 'absolute',
-          top: -14, left: 0, right: 0,
-          textAlign: 'center',
-          fontSize: 8,
-          fontFamily: 'Helvetica, Arial, sans-serif',
-          fontWeight: 'bold',
-          letterSpacing: '0.02rem',
-          textTransform: 'uppercase',
+          position: 'absolute', top: -14, left: 0, right: 0,
+          textAlign: 'center', fontSize: 8,
+          fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold',
+          letterSpacing: '0.02rem', textTransform: 'uppercase',
           color: 'var(--color-fg)',
         }}>
           {isSelected ? '★ Selected' : '★ Nearest'}
         </div>
       )}
-
-      {/* Selected marker on non-nearest swatches */}
       {isSelected && !isNearest && (
         <div style={{
-          position: 'absolute',
-          top: -14, left: 0, right: 0,
-          textAlign: 'center',
-          fontSize: 8,
-          fontFamily: 'Helvetica, Arial, sans-serif',
-          fontWeight: 'bold',
-          letterSpacing: '0.02rem',
-          textTransform: 'uppercase',
+          position: 'absolute', top: -14, left: 0, right: 0,
+          textAlign: 'center', fontSize: 8,
+          fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold',
+          letterSpacing: '0.02rem', textTransform: 'uppercase',
           color: 'var(--color-fg)',
         }}>
           Selected
         </div>
+      )}
+
+      {/* Out-of-gamut warning badge */}
+      {gamut.outOfGamut && (
+        <div
+          title={`Out of FOGRA39 gamut — press reproduction will differ by dE ${gamut.deltaE.toFixed(1)}`}
+          style={{
+            position: 'absolute', top: 4, right: 4,
+            width: 8, height: 8, borderRadius: '50%',
+            background: '#ef4444',
+            border: '1px solid rgba(255,255,255,0.6)',
+            flexShrink: 0,
+          }}
+        />
       )}
 
       <div style={{ color: textColor, fontSize: 8, opacity: 0.65 }}>CMYK</div>

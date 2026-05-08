@@ -44,73 +44,89 @@ export function downloadCSV(colours, step, spread) {
 }
 
 // ─── Figma Variables Export ───────────────────────────────────────────────────
-// Exports the Radix 12-step scale as a Figma variable collection JSON.
-// Import via Figma → Assets → Libraries → Import Variables (requires Figma Pro).
+// Exports the Radix 12-step scale in DTCG (Design Tokens Community Group) format.
+// Native import: Figma → Variables panel → right-click mode → Import mode
+// Each mode (Light / Dark) is a separate JSON file for native import.
+// Also exports a combined file for Tokens Studio plugin.
 
 import { generateRadixPalette, STEP_LABELS } from './radixPalette';
 
-function rgbToHex255(r, g, b) {
-  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+function toHex(r, g, b) {
+  return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
 }
 
-export function exportFigmaVariables(colours) {
-  const collection = {
-    name: 'CMYK Colour System',
-    modes: ['Light', 'Dark'],
-    variables: [],
+// DTCG color token — Figma native format
+function colorToken(r, g, b, description) {
+  return {
+    $type: 'color',
+    $value: {
+      colorSpace: 'srgb',
+      components: [
+        parseFloat((r / 255).toFixed(6)),
+        parseFloat((g / 255).toFixed(6)),
+        parseFloat((b / 255).toFixed(6)),
+      ],
+      alpha: 1,
+      hex: toHex(r, g, b),
+    },
+    $description: description || '',
   };
+}
+
+// Build one DTCG token set for a given mode (light or dark)
+function buildModeTokens(colours, modeKey) {
+  const tokens = {};
 
   colours.forEach(entry => {
     const palette   = generateRadixPalette(entry.r, entry.g, entry.b);
+    const scale     = modeKey === 'light' ? palette.light : palette.dark;
     const groupName = (entry.label || `RGB ${entry.r} ${entry.g} ${entry.b}`)
       .replace(/[^a-zA-Z0-9 _-]/g, '').trim();
 
-    for (let i = 0; i < 12; i++) {
-      const lightHex = rgbToHex255(palette.light[i].r, palette.light[i].g, palette.light[i].b);
-      const darkHex  = rgbToHex255(palette.dark[i].r,  palette.dark[i].g,  palette.dark[i].b);
+    tokens[groupName] = {};
 
-      collection.variables.push({
-        name:        `${groupName}/Step ${i + 1} – ${STEP_LABELS[i]}`,
-        type:        'COLOR',
-        description: `Radix step ${i + 1} (${STEP_LABELS[i]}) for ${groupName}`,
-        valuesByMode: {
-          Light: lightHex,
-          Dark:  darkHex,
-        },
-      });
-    }
-
-    // Solid colour (step 9) as a top-level alias for easy reference
-    const solidHex = rgbToHex255(entry.r, entry.g, entry.b);
-    collection.variables.push({
-      name:        `${groupName}/Brand Solid`,
-      type:        'COLOR',
-      description: `Source colour for ${groupName} — use for primary solid UI elements`,
-      valuesByMode: {
-        Light: solidHex,
-        Dark:  solidHex,
-      },
+    scale.forEach((step, i) => {
+      const key = `${i + 1}-${STEP_LABELS[i].replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`;
+      tokens[groupName][key] = colorToken(
+        step.r, step.g, step.b,
+        `Step ${i + 1} · ${STEP_LABELS[i]} · ${groupName}`
+      );
     });
+
+    // Brand solid alias (step 9)
+    tokens[groupName]['brand-solid'] = colorToken(
+      entry.r, entry.g, entry.b,
+      `Source colour · ${groupName}`
+    );
   });
 
-  return {
-    version: '1.0',
-    collections: [collection],
-    meta: {
-      generated:   new Date().toISOString(),
-      tool:        'CMYK Grid Tester',
-      description: 'Radix-style 12-step UI colour scales. Import via Figma Variables API or Tokens Studio.',
-    },
-  };
+  return tokens;
+}
+
+export function exportFigmaLight(colours) {
+  return buildModeTokens(colours, 'light');
+}
+
+export function exportFigmaDark(colours) {
+  return buildModeTokens(colours, 'dark');
+}
+
+function downloadJSON(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export function downloadFigmaVariables(colours) {
-  const json = exportFigmaVariables(colours);
-  const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `figma-variables-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const date = new Date().toISOString().slice(0, 10);
+  // Export two files — one per mode — for Figma's native Import mode
+  downloadJSON(exportFigmaLight(colours), `figma-light-${date}.json`);
+  // Small delay so browsers don't block the second download
+  setTimeout(() => {
+    downloadJSON(exportFigmaDark(colours), `figma-dark-${date}.json`);
+  }, 300);
 }

@@ -177,8 +177,24 @@ export default function ColourResult({ entry, step, spread }) {
 
       {/* Swatch grid */}
       <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        margin: '10px 0 4px', opacity: 0.4,
+      }}>
+        <div style={{
+          width: 7, height: 7, borderRadius: '50%',
+          background: '#ef4444', flexShrink: 0,
+        }} />
+        <div style={{
+          fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 8,
+          fontWeight: 'bold', letterSpacing: '0.03rem', textTransform: 'uppercase',
+          color: 'var(--color-fg)',
+        }}>
+          Out of FOGRA39 gamut — press result will differ visibly
+        </div>
+      </div>
+      <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
-        gap: 4, marginTop: 14, padding: '0 0 4px',
+        gap: 4, padding: '0 0 4px',
       }}>
         {grid.map((sw, i) => (
           <Swatch

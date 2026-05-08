@@ -315,3 +315,29 @@ export function nearestPantonesForCmyk(c, m, y, k, count = 2) {
   const { r, g, b } = cmykToRgb(c, m, y, k);
   return nearestPantones(r, g, b, count);
 }
+
+// ─── FOGRA39 gamut warning ────────────────────────────────────────────────────
+// A swatch is considered "out of gamut" if its screen RGB colour cannot be
+// faithfully reproduced within FOGRA39 constraints (TAC 330, K max 85).
+// We detect this by checking whether the nearest CMYK match has a perceptual
+// distance (deltaE2000) above a threshold — meaning the press cannot get
+// close enough to the intended screen colour.
+//
+// Threshold guide:
+//   < 2  : imperceptible difference — in gamut
+//   2–4  : just noticeable — borderline
+//   4+   : clearly visible on press — out of gamut (flagged)
+
+const GAMUT_WARNING_THRESHOLD = 4.0;
+
+export function isOutOfGamut(r, g, b) {
+  // Get the nearest printable CMYK
+  const best = rgbToCmyk(r, g, b);
+  // Convert that CMYK back to RGB (what the press actually produces)
+  const printed = cmykToRgb(best.c, best.m, best.y, best.k);
+  // Compare in Lab
+  const targetLab  = rgbToLab(r, g, b);
+  const printedLab = rgbToLab(printed.r, printed.g, printed.b);
+  const dE = deltaE2000(targetLab, printedLab);
+  return { outOfGamut: dE > GAMUT_WARNING_THRESHOLD, deltaE: dE };
+}
