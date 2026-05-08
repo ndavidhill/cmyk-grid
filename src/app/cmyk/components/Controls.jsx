@@ -74,6 +74,18 @@ export default function Controls({
     if (parsed.length) setColours(parsed);
   }
 
+  const dlLinkStyle = {
+    display: 'inline-block',
+    marginTop: 2,
+    fontFamily: 'Helvetica, Arial, sans-serif',
+    fontSize: 11,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: '0.02rem',
+    color: 'var(--color-fg)',
+    textDecoration: 'underline',
+  };
+
   function handleExportCSV() {
     downloadCSV(colours, step, spread);
     setExportFlash(true);
@@ -212,26 +224,27 @@ export default function Controls({
           {exportFlash ? '✓ Exported' : 'Export CSV → InDesign'}
         </Btn>
         <Btn onClick={() => window.print()}>Print / PDF</Btn>
-        <div style={{ fontSize: 10, opacity: 0.5, lineHeight: 1.6, marginTop: 4 }}>
-          Download the InDesign script below, then run it with your exported CSV for FOGRA39/PDF X-4 output.
+        <div style={{ marginTop: 10, borderTop: '1px solid var(--color-accent)', paddingTop: 8 }}>
+          <div style={{ fontSize: 9, fontWeight: 'bold', letterSpacing: '0.05rem', opacity: 0.4, marginBottom: 6, fontFamily: 'Helvetica, Arial, sans-serif', textTransform: 'uppercase' }}>
+            Scripts
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 10, opacity: 0.5, lineHeight: 1.5, marginBottom: 4, fontFamily: 'Helvetica, Arial, sans-serif' }}>
+              InDesign — build a FOGRA39 swatch sheet from your exported CSV.
+            </div>
+            <a href="/CMYK_Fogra39_Swatches.jsx" download style={dlLinkStyle}>
+              ↓ CMYK_Fogra39_Swatches.jsx
+            </a>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, opacity: 0.5, lineHeight: 1.5, marginBottom: 4, fontFamily: 'Helvetica, Arial, sans-serif' }}>
+              Illustrator — matches CSV swatch values to rectangles by position and applies exact CMYK fills. Open your PDF in Illustrator first, then run.
+            </div>
+            <a href="/CMYK_CSV_Recolour.jsx" download style={dlLinkStyle}>
+              ↓ CMYK_CSV_Recolour.jsx
+            </a>
+          </div>
         </div>
-        <a
-          href="/CMYK_Fogra39_Swatches.jsx"
-          download
-          style={{
-            display: 'inline-block',
-            marginTop: 6,
-            fontFamily: 'Helvetica, Arial, sans-serif',
-            fontSize: 11,
-            fontWeight: 'bold',
-            textTransform: 'uppercase',
-            letterSpacing: '0.02rem',
-            color: 'var(--color-fg)',
-            textDecoration: 'underline',
-          }}
-        >
-          ↓ CMYK_Fogra39_Swatches.jsx
-        </a>
       </Dropdown>
 
       {/* Display */}
