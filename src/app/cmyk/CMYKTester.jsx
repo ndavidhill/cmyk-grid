@@ -31,6 +31,7 @@ export default function CMYKTester() {
   const [step, setStep]         = useState(5);
   const [spread, setSpread]     = useState(1);
   const [inverted, setInverted] = useState(false);
+  const [cbFilter, setCbFilter] = useState('none');
 
   // Hydrate from localStorage on first mount (client only)
   useEffect(() => {
@@ -101,13 +102,30 @@ export default function CMYKTester() {
           step={step} setStep={setStep}
           spread={spread} setSpread={setSpread}
           inverted={inverted} setInverted={setInverted}
+          cbFilter={cbFilter} setCbFilter={setCbFilter}
         />
       </div>
+
+      {/* Hidden SVG filters for colour blindness simulation */}
+      <svg style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+        <defs>
+          <filter id="cb-deuteranopia">
+            <feColorMatrix type="matrix" values="0.367 0.861 -0.228 0 0  0.280 0.673 0.047 0 0  -0.012 0.043 0.969 0 0  0 0 0 1 0"/>
+          </filter>
+          <filter id="cb-protanopia">
+            <feColorMatrix type="matrix" values="0.152 1.053 -0.205 0 0  0.115 0.786 0.099 0 0  -0.004 -0.048 1.052 0 0  0 0 0 1 0"/>
+          </filter>
+          <filter id="cb-tritanopia">
+            <feColorMatrix type="matrix" values="1.256 -0.077 -0.179 0 0  -0.078 0.931 0.148 0 0  0.005 0.691 0.304 0 0  0 0 0 1 0"/>
+          </filter>
+        </defs>
+      </svg>
 
       <div className="main-area print-area" style={{
         position: 'absolute', top: 10, right: 10,
         width: 'calc(100vw - 370px)', height: 'calc(100vh - 20px)',
         overflowY: 'auto', scrollbarWidth: 'none',
+        filter: cbFilter === 'none' ? 'none' : `url(#cb-${cbFilter})`,
       }}>
         <div className="print-header" style={{ display: 'none' }}>
           <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 14, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05rem' }}>

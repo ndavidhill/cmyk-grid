@@ -1,23 +1,79 @@
 'use client';
-import { hexToRgb, rgbToHex, clamp } from '../colourMath';
+import { hexToRgb, rgbToHex, clamp, rgbToCmyk, generateHarmonies } from '../colourMath';
 import { downloadCSV, downloadFigmaVariables } from '../export';
 import Dropdown from './Dropdown';
 import { Btn, RangeRow, inputStyle, labelStyle } from './Ui';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
-const PRESETS = [
-  { label: 'Pantone 485', r: 218, g: 41, b: 28 },
-  { label: 'Process Blue', r: 0, g: 133, b: 202 },
-  { label: 'Cool Grey 9', r: 117, g: 120, b: 123 },
-  { label: 'Pantone 368', r: 120, g: 190, b: 32 },
-  { label: 'Pantone 109', r: 255, g: 209, b: 0 },
-];
+// ─── Colour blindness SVG filter matrices ─────────────────────────────────────
+// Applied as a CSS filter on the main canvas — no canvas/image manipulation needed.
+// Matrices from Machado et al. (2009) — widely used industry standard.
+const CB_FILTERS = {
+  none:        null,
+  deuteranopia: `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><filter id='cb'><feColorMatrix type='matrix' values='0.367 0.861 -0.228 0 0  0.280 0.673 0.047 0 0  -0.012 0.043 0.969 0 0  0 0 0 1 0'/></filter></svg>#cb")`,
+  protanopia:   `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><filter id='cb'><feColorMatrix type='matrix' values='0.152 1.053 -0.205 0 0  0.115 0.786 0.099 0 0  -0.004 -0.048 1.052 0 0  0 0 0 1 0'/></filter></svg>#cb")`,
+  tritanopia:   `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><filter id='cb'><feColorMatrix type='matrix' values='1.256 -0.077 -0.179 0 0  -0.078 0.931 0.148 0 0  0.005 0.691 0.304 0 0  0 0 0 1 0'/></filter></svg>#cb")`,
+};
 
+const CB_LABELS = {
+  none:         'None',
+  deuteranopia: 'Deuteranopia (Red-Green)',
+  protanopia:   'Protanopia (Red-Green)',
+  tritanopia:   'Tritanopia (Blue-Yellow)',
+};
+
+// ─── Harmony chip ─────────────────────────────────────────────────────────────
+function HarmonyRow({ group, onAdd }) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{
+        fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 9,
+        fontWeight: 'bold', letterSpacing: '0.04rem', textTransform: 'uppercase',
+        color: 'var(--color-fg)', opacity: 0.4, marginBottom: 4,
+      }}>
+        {group.label}
+      </div>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        {group.colours.map((c, i) => {
+          const hex = rgbToHex(c.r, c.g, c.b);
+          const cmyk = rgbToCmyk(c.r, c.g, c.b);
+          return (
+            <div key={i} style={{ flex: 1 }}>
+              <div style={{
+                height: 28, borderRadius: 4,
+                background: hex,
+                WebkitPrintColorAdjust: 'exact',
+                marginBottom: 3,
+                outline: '1px solid var(--color-accent)',
+              }} />
+              <div style={{
+                fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 8,
+                fontWeight: 'bold', letterSpacing: '0.02rem', textTransform: 'uppercase',
+                color: 'var(--color-fg)', opacity: 0.5, lineHeight: 1.4,
+              }}>
+                C{cmyk.c} M{cmyk.m}<br />Y{cmyk.y} K{cmyk.k}
+              </div>
+              <Btn
+                onClick={() => onAdd(c.r, c.g, c.b, group.label + ' ' + (i + 1))}
+                style={{ margin: '3px 0 0', padding: '2px 6px', fontSize: 9, display: 'block', width: '100%' }}
+              >
+                + Add
+              </Btn>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Controls ─────────────────────────────────────────────────────────────────
 export default function Controls({
   colours, setColours,
   step, setStep,
   spread, setSpread,
   inverted, setInverted,
+  cbFilter, setCbFilter,
 }) {
   const [inputMode, setInputMode] = useState('single');
   const [batchText, setBatchText] = useState('');
@@ -74,43 +130,39 @@ export default function Controls({
     if (parsed.length) setColours(parsed);
   }
 
-  const dlLinkStyle = {
-    display: 'inline-block',
-    marginTop: 2,
-    fontFamily: 'Helvetica, Arial, sans-serif',
-    fontSize: 11,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: '0.02rem',
-    color: 'var(--color-fg)',
-    textDecoration: 'underline',
-  };
-
   function handleExportCSV() {
     downloadCSV(colours, step, spread);
     setExportFlash(true);
     setTimeout(() => setExportFlash(false), 1800);
   }
 
-  const fg = inverted ? '#fff' : '#000';
-  const bg = inverted ? '#000' : '#fff';
+  // Harmonies for current single input colour
+  const harmonies = useMemo(
+    () => generateHarmonies(singleR, singleG, singleB),
+    [singleR, singleG, singleB]
+  );
+
+  const dlLinkStyle = {
+    display: 'inline-block', marginTop: 2,
+    fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 11,
+    fontWeight: 'bold', textTransform: 'uppercase',
+    letterSpacing: '0.02rem', color: 'var(--color-fg)', textDecoration: 'underline',
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
 
       {/* Input */}
       <Dropdown title="Input" defaultOpen>
-        <div style={{ display: 'flex', gap: 0, marginBottom: 8 }}>
+        <div style={{ display: 'flex', marginBottom: 8 }}>
           {['Single', 'Batch'].map(m => (
             <button key={m} onClick={() => setInputMode(m.toLowerCase())} style={{
               flex: 1, padding: '5px 0',
               background: inputMode === m.toLowerCase() ? 'var(--color-fg)' : 'var(--color-bg)',
               color: inputMode === m.toLowerCase() ? 'var(--color-bg)' : 'var(--color-fg)',
               border: 'none', borderRadius: 5,
-              fontFamily: 'Helvetica, Arial, sans-serif',
-              fontSize: 11, fontWeight: 'bold',
-              textTransform: 'uppercase', letterSpacing: '0.02rem',
-              cursor: 'pointer', margin: '0 2px',
+              fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 11, fontWeight: 'bold',
+              textTransform: 'uppercase', letterSpacing: '0.02rem', cursor: 'pointer', margin: '0 2px',
             }}>{m}</button>
           ))}
         </div>
@@ -118,36 +170,29 @@ export default function Controls({
         {inputMode === 'single' && (<>
           <label style={labelStyle}>Hex</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="color" value={singleHex}
-              onChange={e => handleHexChange(e.target.value)}
+            <input type="color" value={singleHex} onChange={e => handleHexChange(e.target.value)}
               style={{ width: 28, height: 24, padding: 1, border: 'none', borderRadius: 5, cursor: 'pointer', background: 'var(--color-bg)', flexShrink: 0 }}
             />
-            <input type="text" value={singleHex}
-              onChange={e => handleHexChange(e.target.value)}
+            <input type="text" value={singleHex} onChange={e => handleHexChange(e.target.value)}
               style={{ ...inputStyle, marginTop: 0, flex: 1 }}
             />
           </div>
-
           <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
             {[['R', singleR, v => handleRgbChange('r', v)],
               ['G', singleG, v => handleRgbChange('g', v)],
               ['B', singleB, v => handleRgbChange('b', v)]].map(([ch, val, fn]) => (
               <div key={ch} style={{ flex: 1 }}>
                 <label style={{ ...labelStyle, margin: '0 0 2px' }}>{ch}</label>
-                <input type="number" min={0} max={255} value={val}
-                  onChange={e => fn(e.target.value)}
+                <input type="number" min={0} max={255} value={val} onChange={e => fn(e.target.value)}
                   style={{ ...inputStyle, textAlign: 'center', padding: '3px 2px', marginTop: 0 }}
                 />
               </div>
             ))}
           </div>
-
           <label style={labelStyle}>Label</label>
-          <input type="text" placeholder="Optional label"
-            value={singleLabel} onChange={e => setSingleLabel(e.target.value)}
-            style={inputStyle}
+          <input type="text" placeholder="Optional label" value={singleLabel}
+            onChange={e => setSingleLabel(e.target.value)} style={inputStyle}
           />
-
           <div>
             <Btn onClick={() => setColours(p => [...p, { r: singleR, g: singleG, b: singleB, label: singleLabel }])}>
               + Add
@@ -163,16 +208,14 @@ export default function Controls({
           <div style={{ fontSize: 10, opacity: 0.5, marginBottom: 6, lineHeight: 1.5 }}>
             #da291c Label<br />218 41 28 Label
           </div>
-          <textarea
-            value={batchText} onChange={e => setBatchText(e.target.value)}
+          <textarea value={batchText} onChange={e => setBatchText(e.target.value)}
             placeholder={'#da291c Pantone 485\n#0085ca Process Blue'}
             rows={6}
             style={{
               width: '100%', padding: 6,
               background: 'var(--color-bg)', color: 'var(--color-fg)',
               borderRadius: 5, border: 'none', marginTop: 4, resize: 'vertical',
-              fontFamily: 'Helvetica, Arial, sans-serif',
-              fontSize: 12, lineHeight: 1.4,
+              fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 12, lineHeight: 1.4,
               letterSpacing: '0.02rem', textTransform: 'uppercase', fontWeight: 'bold',
             }}
           />
@@ -185,29 +228,21 @@ export default function Controls({
         </>)}
       </Dropdown>
 
-      {/* Presets */}
-      <Dropdown title="Presets">
-        {PRESETS.map((p, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0' }}>
-            <div style={{
-              width: 16, height: 16, borderRadius: 3, flexShrink: 0,
-              background: rgbToHex(p.r, p.g, p.b),
-              outline: '1px solid var(--color-accent)',
-            }} />
-            <span style={{
-              flex: 1, fontSize: 11,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              fontFamily: 'Helvetica, Arial, sans-serif',
-              letterSpacing: '0.02rem', textTransform: 'uppercase',
-            }}>
-              {p.label}
-            </span>
-            <Btn onClick={() => setColours([p])} style={{ margin: 0, padding: '3px 7px', fontSize: 10 }}>
-              Load
-            </Btn>
+      {/* Harmony — only shown in single mode, derived from current input */}
+      {inputMode === 'single' && (
+        <Dropdown title="Harmony">
+          <div style={{ fontSize: 9, opacity: 0.4, lineHeight: 1.5, marginBottom: 8, fontFamily: 'Helvetica, Arial, sans-serif' }}>
+            Companions derived from current input colour via OKLCH hue rotation. Click + Add to add to queue.
           </div>
-        ))}
-      </Dropdown>
+          {harmonies.map((group, i) => (
+            <HarmonyRow
+              key={i}
+              group={group}
+              onAdd={(r, g, b, label) => setColours(p => [...p, { r, g, b, label }])}
+            />
+          ))}
+        </Dropdown>
+      )}
 
       {/* Grid settings */}
       <Dropdown title="Grid Settings" defaultOpen>
@@ -226,8 +261,8 @@ export default function Controls({
         <Btn onClick={() => downloadFigmaVariables(colours)}>
           Export → Figma (Light + Dark)
         </Btn>
-        <div style={{ fontSize: 9, opacity: 0.4, lineHeight: 1.5, marginBottom: 4, fontFamily: 'Helvetica, Arial, sans-serif' }}>
-          Downloads 2 JSON files. In Figma: Variables panel → right-click a mode → Import mode.
+        <div style={{ fontSize: 9, opacity: 0.4, lineHeight: 1.6, marginBottom: 4, fontFamily: 'Helvetica, Arial, sans-serif' }}>
+          Downloads figma-light.json + figma-dark.json. In Figma: Variables panel → create collection → right-click Light mode → Import mode → repeat for Dark. Or drag both files at once into the Variables modal.
         </div>
         <Btn onClick={() => window.print()}>Print / PDF</Btn>
         <div style={{ marginTop: 10, borderTop: '1px solid var(--color-accent)', paddingTop: 8 }}>
@@ -244,7 +279,7 @@ export default function Controls({
           </div>
           <div>
             <div style={{ fontSize: 10, opacity: 0.5, lineHeight: 1.5, marginBottom: 4, fontFamily: 'Helvetica, Arial, sans-serif' }}>
-              Illustrator — matches CSV swatch values to rectangles by position and applies exact CMYK fills. Open your PDF in Illustrator first, then run.
+              Illustrator — matches CSV swatch values to rectangles by position and applies exact CMYK fills.
             </div>
             <a href="/CMYK_CSV_Recolour.jsx" download style={dlLinkStyle}>
               ↓ CMYK_CSV_Recolour.jsx
@@ -256,8 +291,33 @@ export default function Controls({
       {/* Display */}
       <Dropdown title="Display">
         <Btn onClick={() => setInverted(v => !v)}>
-          {inverted ? 'Light Mode' : 'Invert Color'}
+          {inverted ? 'Light Mode' : 'Invert Colour'}
         </Btn>
+
+        {/* Colour blindness simulation */}
+        <div style={{ ...labelStyle, marginTop: 10 }}>Colour Blindness Sim</div>
+        {Object.keys(CB_LABELS).map(key => (
+          <button
+            key={key}
+            onClick={() => setCbFilter(key)}
+            style={{
+              display: 'block', width: '100%', textAlign: 'left',
+              padding: '5px 8px', marginBottom: 3, borderRadius: 4,
+              border: 'none', cursor: 'pointer',
+              background: cbFilter === key ? 'var(--color-fg)' : 'var(--color-accent)',
+              color: cbFilter === key ? 'var(--color-bg)' : 'var(--color-fg)',
+              fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 10,
+              fontWeight: 'bold', letterSpacing: '0.02rem', textTransform: 'uppercase',
+            }}
+          >
+            {cbFilter === key ? '✓ ' : ''}{CB_LABELS[key]}
+          </button>
+        ))}
+        {cbFilter !== 'none' && (
+          <div style={{ fontSize: 9, opacity: 0.4, marginTop: 4, lineHeight: 1.5, fontFamily: 'Helvetica, Arial, sans-serif' }}>
+            Simulating {CB_LABELS[cbFilter]}. Affects the swatch canvas only.
+          </div>
+        )}
       </Dropdown>
 
       {/* Queue */}
@@ -280,10 +340,8 @@ export default function Controls({
             }}>
               {c.label || `RGB ${c.r} ${c.g} ${c.b}`}
             </span>
-            <Btn
-              onClick={() => setColours(p => p.filter((_, j) => j !== i))}
-              style={{ margin: 0, padding: '3px 7px', fontSize: 10 }}
-            >
+            <Btn onClick={() => setColours(p => p.filter((_, j) => j !== i))}
+              style={{ margin: 0, padding: '3px 7px', fontSize: 10 }}>
               ×
             </Btn>
           </div>
@@ -303,10 +361,8 @@ export default function Controls({
 
       {/* Footer */}
       <div style={{
-        marginTop: 'auto', paddingTop: 10,
-        fontSize: 10, opacity: 0.4, lineHeight: 1.5,
-        fontFamily: 'Helvetica, Arial, sans-serif',
-        letterSpacing: '0.02rem', textTransform: 'uppercase',
+        marginTop: 'auto', paddingTop: 10, fontSize: 10, opacity: 0.4, lineHeight: 1.5,
+        fontFamily: 'Helvetica, Arial, sans-serif', letterSpacing: '0.02rem', textTransform: 'uppercase',
       }}>
         CMYK Grid Tester · Step ±{step}% · {new Date().toLocaleDateString('en-GB')}
       </div>

@@ -341,3 +341,68 @@ export function isOutOfGamut(r, g, b) {
   const dE = deltaE2000(targetLab, printedLab);
   return { outOfGamut: dE > GAMUT_WARNING_THRESHOLD, deltaE: dE };
 }
+
+// ─── Colour harmony ───────────────────────────────────────────────────────────
+// Generates complementary, triadic, split-complementary and analogous companions
+// all working in OKLCH so hue rotation is perceptually uniform.
+
+function rgbToOklchSimple(r, g, b) {
+  // Linear sRGB
+  const rl = Math.pow(r / 255, 2.2);
+  const gl = Math.pow(g / 255, 2.2);
+  const bl = Math.pow(b / 255, 2.2);
+  // OKLab
+  const l = Math.cbrt(0.4122214708 * rl + 0.5363325363 * gl + 0.0514459929 * bl);
+  const m = Math.cbrt(0.2119034982 * rl + 0.6806995451 * gl + 0.1073969566 * bl);
+  const s = Math.cbrt(0.0883024619 * rl + 0.2817188376 * gl + 0.6299787005 * bl);
+  const L  =  0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+  const a  =  1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+  const bv = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+  const C = Math.sqrt(a * a + bv * bv);
+  const H = ((Math.atan2(bv, a) * 180 / Math.PI) + 360) % 360;
+  return { L, C, H };
+}
+
+function oklchToRgbSimple(L, C, H) {
+  const hRad = H * Math.PI / 180;
+  const a = C * Math.cos(hRad);
+  const bv = C * Math.sin(hRad);
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * bv;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * bv;
+  const s_ = L - 0.0894841775 * a - 1.2914855480 * bv;
+  const l = l_ * l_ * l_;
+  const m = m_ * m_ * m_;
+  const s = s_ * s_ * s_;
+  const rl =  4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+  const gl = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+  const bl = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+  const c01 = v => Math.max(0, Math.min(1, v));
+  const toSrgb = v => v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1/2.4) - 0.055;
+  return {
+    r: Math.round(toSrgb(c01(rl)) * 255),
+    g: Math.round(toSrgb(c01(gl)) * 255),
+    b: Math.round(toSrgb(c01(bl)) * 255),
+  };
+}
+
+function rotateHue(r, g, b, angle) {
+  const { L, C, H } = rgbToOklchSimple(r, g, b);
+  return oklchToRgbSimple(L, C, (H + angle + 360) % 360);
+}
+
+export function generateHarmonies(r, g, b) {
+  const comp  = rotateHue(r, g, b, 180);
+  const tri1  = rotateHue(r, g, b, 120);
+  const tri2  = rotateHue(r, g, b, 240);
+  const split1 = rotateHue(r, g, b, 150);
+  const split2 = rotateHue(r, g, b, 210);
+  const ana1  = rotateHue(r, g, b, 30);
+  const ana2  = rotateHue(r, g, b, -30);
+
+  return [
+    { label: 'Complementary',       colours: [comp] },
+    { label: 'Triadic',             colours: [tri1, tri2] },
+    { label: 'Split-Complementary', colours: [split1, split2] },
+    { label: 'Analogous',           colours: [ana1, ana2] },
+  ];
+}
