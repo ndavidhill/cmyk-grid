@@ -1,6 +1,6 @@
 'use client';
 import { hexToRgb, rgbToHex, clamp } from '../colourMath';
-import { downloadCSV } from '../export';
+import { downloadCSV, downloadFigmaVariables } from '../export';
 import Dropdown from './Dropdown';
 import { Btn, RangeRow, inputStyle, labelStyle } from './Ui';
 import { useState } from 'react';
@@ -223,6 +223,9 @@ export default function Controls({
         <Btn onClick={handleExportCSV} red={exportFlash}>
           {exportFlash ? '✓ Exported' : 'Export CSV → InDesign'}
         </Btn>
+        <Btn onClick={() => downloadFigmaVariables(colours)}>
+          Export → Figma Variables
+        </Btn>
         <Btn onClick={() => window.print()}>Print / PDF</Btn>
         <div style={{ marginTop: 10, borderTop: '1px solid var(--color-accent)', paddingTop: 8 }}>
           <div style={{ fontSize: 9, fontWeight: 'bold', letterSpacing: '0.05rem', opacity: 0.4, marginBottom: 6, fontFamily: 'Helvetica, Arial, sans-serif', textTransform: 'uppercase' }}>
@@ -282,6 +285,17 @@ export default function Controls({
             </Btn>
           </div>
         ))}
+        {colours.length > 1 && (
+          <Btn
+            onClick={() => {
+              setColours([]);
+              try { localStorage.removeItem('cmyk-grid-session'); } catch(e) {}
+            }}
+            style={{ marginTop: 6, fontSize: 9, padding: '3px 7px', opacity: 0.6 }}
+          >
+            Clear All
+          </Btn>
+        )}
       </Dropdown>
 
       {/* Footer */}

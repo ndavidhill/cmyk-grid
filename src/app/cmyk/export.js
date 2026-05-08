@@ -42,3 +42,75 @@ export function downloadCSV(colours, step, spread) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// ─── Figma Variables Export ───────────────────────────────────────────────────
+// Exports the Radix 12-step scale as a Figma variable collection JSON.
+// Import via Figma → Assets → Libraries → Import Variables (requires Figma Pro).
+
+import { generateRadixPalette, STEP_LABELS } from './radixPalette';
+
+function rgbToHex255(r, g, b) {
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+export function exportFigmaVariables(colours) {
+  const collection = {
+    name: 'CMYK Colour System',
+    modes: ['Light', 'Dark'],
+    variables: [],
+  };
+
+  colours.forEach(entry => {
+    const palette   = generateRadixPalette(entry.r, entry.g, entry.b);
+    const groupName = (entry.label || `RGB ${entry.r} ${entry.g} ${entry.b}`)
+      .replace(/[^a-zA-Z0-9 _-]/g, '').trim();
+
+    for (let i = 0; i < 12; i++) {
+      const lightHex = rgbToHex255(palette.light[i].r, palette.light[i].g, palette.light[i].b);
+      const darkHex  = rgbToHex255(palette.dark[i].r,  palette.dark[i].g,  palette.dark[i].b);
+
+      collection.variables.push({
+        name:        `${groupName}/Step ${i + 1} – ${STEP_LABELS[i]}`,
+        type:        'COLOR',
+        description: `Radix step ${i + 1} (${STEP_LABELS[i]}) for ${groupName}`,
+        valuesByMode: {
+          Light: lightHex,
+          Dark:  darkHex,
+        },
+      });
+    }
+
+    // Solid colour (step 9) as a top-level alias for easy reference
+    const solidHex = rgbToHex255(entry.r, entry.g, entry.b);
+    collection.variables.push({
+      name:        `${groupName}/Brand Solid`,
+      type:        'COLOR',
+      description: `Source colour for ${groupName} — use for primary solid UI elements`,
+      valuesByMode: {
+        Light: solidHex,
+        Dark:  solidHex,
+      },
+    });
+  });
+
+  return {
+    version: '1.0',
+    collections: [collection],
+    meta: {
+      generated:   new Date().toISOString(),
+      tool:        'CMYK Grid Tester',
+      description: 'Radix-style 12-step UI colour scales. Import via Figma Variables API or Tokens Studio.',
+    },
+  };
+}
+
+export function downloadFigmaVariables(colours) {
+  const json = exportFigmaVariables(colours);
+  const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `figma-variables-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
