@@ -167,70 +167,62 @@ export function deltaE2000(lab1, lab2) {
 // way human vision does.
 
 // FOGRA39 print constraints
-const FOGRA39_TAC  = 330; // Total Area Coverage limit
-const FOGRA39_MAX_K = 85; // Max black — avoids muddy shadow colours
+const FOGRA39_TAC   = 330;
+const FOGRA39_MAX_K = 85;
 
-// Conversion grid resolution — 1% gives accurate nearest-match results.
-// The two-pass search (RGB prefilter → ΔE2000 shortlist) keeps this fast:
-// ~165k candidates are narrowed to 300 before ΔE2000 runs.
-const CANDIDATE_STEP = 1;
+// FOGRA39-aware RGB->CMYK using a two-pass search:
+//   Pass 1: 10% coarse grid (~12k entries, no pre-allocation, fast)
+//   Pass 2: 1% refinement in a +/-6 neighbourhood around the winner (~28k max)
+// Total work per colour: ~40k deltaE2000 calls vs 165k for brute-force 1%.
+// No heavy upfront cache build — Lab is computed on-the-fly per search.
 
-// Module-level candidate cache — built once per browser session.
-// The 'typeof window' check prevents this running during SSR on the server.
-let _candidateCache = null;
+export function rgbToCmyk(r, g, b) {
+  const targetLab = rgbToLab(r, g, b);
 
-function buildCandidates() {
-  if (_candidateCache) return _candidateCache;
+  // Pass 1: coarse 10% grid search
+  let bestC = 0, bestM = 0, bestY = 0, bestK = 0;
+  let bestDE = Infinity;
 
-  const candidates = [];
-  for (let c = 0; c <= 100; c += CANDIDATE_STEP) {
-    for (let m = 0; m <= 100; m += CANDIDATE_STEP) {
-      for (let y = 0; y <= 100; y += CANDIDATE_STEP) {
-        for (let k = 0; k <= FOGRA39_MAX_K; k += CANDIDATE_STEP) {
+  for (let c = 0; c <= 100; c += 10) {
+    for (let m = 0; m <= 100; m += 10) {
+      for (let y = 0; y <= 100; y += 10) {
+        for (let k = 0; k <= FOGRA39_MAX_K; k += 10) {
           if (c + m + y + k > FOGRA39_TAC) continue;
-          const { r, g, b } = cmykToRgb(c, m, y, k);
-          const lab = rgbToLab(r, g, b);
-          candidates.push({ c, m, y, k, r, g, b, lab });
+          const rgb = cmykToRgb(c, m, y, k);
+          const lab = rgbToLab(rgb.r, rgb.g, rgb.b);
+          const dE  = deltaE2000(targetLab, lab);
+          if (dE < bestDE) {
+            bestDE = dE; bestC = c; bestM = m; bestY = y; bestK = k;
+          }
         }
       }
     }
   }
 
-  _candidateCache = candidates;
-  return candidates;
-}
+  // Pass 2: 1% refinement in +/-6 neighbourhood around coarse winner
+  const RANGE = 6;
+  const cMin = Math.max(0,   bestC - RANGE);  const cMax = Math.min(100, bestC + RANGE);
+  const mMin = Math.max(0,   bestM - RANGE);  const mMax = Math.min(100, bestM + RANGE);
+  const yMin = Math.max(0,   bestY - RANGE);  const yMax = Math.min(100, bestY + RANGE);
+  const kMin = Math.max(0,   bestK - RANGE);  const kMax = Math.min(FOGRA39_MAX_K, bestK + RANGE);
 
-export function rgbToCmyk(r, g, b) {
-  const candidates = buildCandidates();
-
-  // Pass 1 — fast RGB Euclidean pre-filter.
-  // Narrows 165k candidates to top 300 by simple RGB distance.
-  // This is ~500x faster than running deltaE2000 on all candidates.
-  const withDist = [];
-  for (let i = 0; i < candidates.length; i++) {
-    const cand = candidates[i];
-    const d = (cand.r - r) ** 2 + (cand.g - g) ** 2 + (cand.b - b) ** 2;
-    withDist.push({ cand, d });
-  }
-  withDist.sort((a, b) => a.d - b.d);
-  const shortlist = withDist.slice(0, 300).map(x => x.cand);
-
-  // Pass 2 — precise deltaE2000 on the shortlist only.
-  // Perceptually accurate result without the brute-force cost.
-  const targetLab = rgbToLab(r, g, b);
-  let bestDelta = Infinity;
-  let best = null;
-
-  for (let i = 0; i < shortlist.length; i++) {
-    const cand = shortlist[i];
-    const dE = deltaE2000(targetLab, cand.lab);
-    if (dE < bestDelta) {
-      bestDelta = dE;
-      best = cand;
+  for (let c = cMin; c <= cMax; c++) {
+    for (let m = mMin; m <= mMax; m++) {
+      for (let y = yMin; y <= yMax; y++) {
+        for (let k = kMin; k <= kMax; k++) {
+          if (c + m + y + k > FOGRA39_TAC) continue;
+          const rgb = cmykToRgb(c, m, y, k);
+          const lab = rgbToLab(rgb.r, rgb.g, rgb.b);
+          const dE  = deltaE2000(targetLab, lab);
+          if (dE < bestDE) {
+            bestDE = dE; bestC = c; bestM = m; bestY = y; bestK = k;
+          }
+        }
+      }
     }
   }
 
-  return { c: best.c, m: best.m, y: best.y, k: best.k };
+  return { c: bestC, m: bestM, y: bestY, k: bestK };
 }
 
 // ─── Grid generation ──────────────────────────────────────────────────────────
