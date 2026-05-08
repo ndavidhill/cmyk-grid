@@ -135,13 +135,13 @@ export function deltaE2000(lab1, lab2) {
     + 0.32 * Math.cos((3 * Hpm + 6) * (Math.PI / 180))
     - 0.20 * Math.cos((4 * Hpm - 63) * (Math.PI / 180));
 
-  const SL = 1 + 0.015 * (Lpm - 50) ** 2 / Math.sqrt(20 + (Lpm - 50) ** 2);
+  const SL = 1 + 0.015 * Math.pow(Lpm - 50, 2) / Math.sqrt(20 + Math.pow(Lpm - 50, 2));
   const SC = 1 + 0.045 * Cpm;
   const SH = 1 + 0.015 * Cpm * T;
 
   const Cpm7 = Cpm ** 7;
   const RC = 2 * Math.sqrt(Cpm7 / (Cpm7 + 25 ** 7));
-  const dTheta = 30 * Math.exp(-((Hpm - 275) / 25) ** 2);
+  const dTheta = 30 * Math.exp(-1 * Math.pow((Hpm - 275) / 25, 2));
   const RT = -Math.sin(2 * dTheta * (Math.PI / 180)) * RC;
 
   return Math.sqrt(
