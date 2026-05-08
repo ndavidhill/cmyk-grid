@@ -290,18 +290,28 @@ function buildPantoneCache() {
   return _pantoneCache;
 }
 
-export function nearestPantone(r, g, b) {
+// Returns top N nearest Pantone C swatches sorted by deltaE2000
+export function nearestPantones(r, g, b, count = 2) {
   const targetLab = rgbToLab(r, g, b);
   const pantones  = buildPantoneCache();
 
-  let best = null;
-  let bestDE = Infinity;
-
+  const results = [];
   for (let i = 0; i < pantones.length; i++) {
     const p  = pantones[i];
     const dE = deltaE2000(targetLab, p.lab);
-    if (dE < bestDE) { bestDE = dE; best = p; }
+    results.push({ ...p, deltaE: dE });
   }
+  results.sort((a, b) => a.deltaE - b.deltaE);
+  return results.slice(0, count);
+}
 
-  return { ...best, deltaE: bestDE };
+// Convenience wrapper for single nearest (backwards compat)
+export function nearestPantone(r, g, b) {
+  return nearestPantones(r, g, b, 1)[0];
+}
+
+// Find nearest Pantones for a given CMYK value (used when a swatch is selected)
+export function nearestPantonesForCmyk(c, m, y, k, count = 2) {
+  const { r, g, b } = cmykToRgb(c, m, y, k);
+  return nearestPantones(r, g, b, count);
 }
